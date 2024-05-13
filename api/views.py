@@ -4,13 +4,20 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+from rest_framework import status
+from rest_framework.decorators import api_view
+from rest_framework.response import Response
+from .models import Job, Category
+from datetime import datetime, timedelta
 
+from django.http import JsonResponse
+import json
 def scrape_jobs(request):
     # Set up Chrome webdriver
     driver = webdriver.Chrome()
 
     # Navigate to the specified URL
-    url = "https://www.indeed.com/jobs?q=driver+ltv&l=india&from=searchOnHP&vjk=42539aeec5a21679"
+    url = "https://www.indeed.com/jobs?q=web+developer&l=&from=searchOnDesktopSerp&vjk=39d82a09e3dd98d3"
     driver.get(url)
 
     # Wait for the job listings to load
@@ -90,3 +97,40 @@ def scrape_jobs(request):
 
     # Return scraped data as JsonResponse
     return JsonResponse({"jobs": job_data_list})
+
+
+@api_view(['POST'])
+def add_job(request):
+    category_title = request.POST.get('category', '')
+    job_type = request.POST.get('job_type', '')
+    category, _ = Category.objects.get_or_create(title=category_title)
+
+
+    data = request.POST.get('data', '')  # Assuming 'data' contains JSON for jobs
+    job_list = json.loads(data)
+    current_date = datetime.now()
+    last_date = current_date + timedelta(days=30)
+
+
+
+    for job_data in job_list['jobs']:
+        job = Job(
+            job_title=job_data.get('job_title', ''),
+            job_description=job_data.get('job_description_text', ''),
+            job_description_html=job_data.get('job_description_html', ''),
+            category=category,
+            company=job_data.get('company_name', ''),
+            company_link=job_data.get('company_link', ''),
+            last_date=last_date,
+            job_type=job_type,
+            salary=job_data.get('salary', ''),
+            location=job_data.get('location', ''),
+            apply_link=job_data.get('job_link', '')
+        )
+
+        try:
+            job.save()
+        except Exception as e:
+            return JsonResponse({'message': str(e)}, status=400)
+
+    return JsonResponse({'message': 'Jobs added successfully'}, status=201)
